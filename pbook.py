@@ -5,140 +5,125 @@ connection = psycopg2.connect(
     database="postgres",
     user="postgres",
     password="010205eb"
-    ) 
+    )
 cur = connection.cursor()
-select_query = """SELECT * FROM Phonebook;"""
-create_table_query = '''CREATE TABLE IF NOT EXISTS Phonebook(
-        name VARCHAR(50),
-        surname VARCHAR(50),
-        number VARCHAR(50)
-        );'''
 
-cur.execute(create_table_query)
-cur.execute(select_query)
-data = cur.fetchall()
+#1
+func1 = """
+CREATE OR REPLACE FUNCTION search_by_pattern(pname VARCHAR, psurname VARCHAR, pnumber VARCHAR)
+RETURNS TABLE(n VARCHAR,
+			s VARCHAR,
+			num VARCHAR)
+			LANGUAGE plpgsql
+AS $$
+BEGIN
+	RETURN QUERY
+	SELECT * FROM phonebook 
+	WHERE name LIKE '%' || pname || '%'
+	AND surname LIKE '%' || psurname || '%'
+	AND number LIKE '%' || pnumber || '%';
+END
+$$;
+"""
+name = 'Name'
+surname = ''
+number = ''
+cur.execute(func1)
+cur.execute(f"SELECT * FROM search_by_pattern('{name}','{surname}', '{number}')")
+print("\n#1")
+print(cur.fetchall())
+#2
 
-def update_from_file(path):
-    f = open(rf"{path}")
-    for line in f.readlines():
-        new_line = line.split(",")
-        add_users_query = f"""INSERT INTO Phonebook
-            (name, surname, number) VALUES ('{new_line[0]}','{new_line[1]}','{new_line[2]}');"""
-        cur.execute(add_users_query)
+proc1 = """
+CREATE OR REPLACE PROCEDURE insert_or_update(n VARCHAR, s VARCHAR, num VARCHAR)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+	cnt INT;
+BEGIN
+	cnt = COUNT(name) from phonebook WHERE name = n;
+	IF cnt = 0 THEN
+		INSERT INTO phonebook (name, surname, number) VALUES (n, s, num);
+	ELSE
+		UPDATE phonebook SET number = num WHERE name = n;
+	END IF;
+END;
+$$;	"""
 
-def datacheck(name):
-    get_query = f"SELECT * FROM phonebook WHERE name = '{name}'"
-    cur.execute(get_query)
-    return cur.fetchall()[0]
+print("\n#2")
+cur.execute(proc1)
+cur.execute("CALL insert_or_update('Max', 'Maxim', '13579');")
+cur.execute("CALL insert_or_update('Max', 'Maxim', '02468');")
+cur.execute("SELECT * FROM phonebook ORDER BY name")
+print(cur.fetchall())
 
-def update():
-    mode = input("""Choose operation:
-1 to add user
-2 to stop adding
-3 to update data
-4 to update data from file
-5 to delete data
-6 to get data
-""")
+#3
+proc2 = """
+CREATE OR REPLACE PROCEDURE insert_from_list(names VARCHAR ARRAY, surnames VARCHAR ARRAY, numbers VARCHAR ARRAY, len INT)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+	cnt INT = 1;
+BEGIN
+	FOR cnt IN 1..len
+	LOOP
+		INSERT INTO phonebook (name, surname, number) VALUES (names[cnt], surnames[cnt], numbers[cnt]);
+	END LOOP;
+END;
+$$;"""
 
-    if mode == "1":
-        name = input("Type your name: ")
-        surname = input("Type your surname: ")
-        number = input("Type your number: ")
-        add_users_query = f"""INSERT INTO Phonebook
-            (name, surname, number) VALUES ('{name}', '{surname}', '{number}');"""
-        cur.execute(add_users_query)
-        return True
-    
-    elif mode == "2":
-        return False
-    
-    elif mode == "3":
-        oper = input("Type:\n1 to change name\n2 to change number\n")
-        if oper == "1":
-            name = input("Type your name: ")
-            if name in datacheck(name):
-                new_name = input("Type new name: ")
-                change_name_query = f"""UPDATE Phonebook SET name = '{new_name}' WHERE name = '{name}';"""
-                cur.execute(change_name_query)
-                return True
-            else:
-                print("Your name not found. Try again")
-                return True
-        elif oper == "2":
-            number = input("Type your number: ")
-            if number in datacheck(number):
-                new_number = input("Type new number: ")
-                change_name_query = f"""UPDATE Phonebook SET number = '{new_number}' WHERE number = '{number}';"""
-                cur.execute(change_name_query)
-                return True
-            else:
-                print("Your number not found. Try again")
-                return True
-            
-        else:
-            print("Error, try again")
-            return True
-        
-    elif mode == "4":
-        filepath = input("Enter filepath: ")
-        update_from_file(filepath)
-        return True
+print("\n#3")
+cur.execute(proc2)
+cur.execute("""CALL insert_from_list(
+    ARRAY['Dan', 'Pan', 'Tan'],
+    ARRAY['Dak', 'Pak', 'Tak'], 
+    ARRAY['123', '456', '789'], 
+    3);""")
+cur.execute("SELECT * FROM phonebook;")
+print(cur.fetchall())
 
-    elif mode == "5":
-        oper = input("Type:\n1 to delete by name\n2 to delete by number\n")
-        if oper == "1":
-            name = input("Type your name: ")
-            if name in datacheck(name):
-                delete_query = f"DELETE FROM phonebook WHERE name = '{name}'"
-                cur.execute(delete_query)
-                return True
-            else:
-                print("Your name not found. Try again")
-                return True
-        elif oper == "2":
-            number = input("Type your number: ")
-            if number in datacheck(number):
-                delete_query = f"DELETE FROM phonebook WHERE number = '{number}'"
-                cur.execute(delete_query)
-                return True
-            else:
-                print("Your number not found. Try again")
-                return True
-        else:
-            print("Error, try again")
-            return True
-        
-    elif mode == "6":
-        oper = input("Type, what do you want to get(name, surname, number): ")
-        if oper == "name":
-            name = input("Type name: ")
-            get_query = f"SELECT * FROM phonebook WHERE name = '{name}'"
-            cur.execute(get_query)
-            print(cur.fetchall())
-        elif oper == "surname":
-            surname = input("Type surname: ")
-            get_query = f"SELECT * FROM phonebook WHERE surname = '{surname}'"
-            cur.execute(get_query)
-            print(cur.fetchall())
 
-        elif oper == "number":
-            number = input("Type number: ")
-            get_query = f"SELECT * FROM phonebook WHERE number = '{number}'"
-            cur.execute(get_query)
-            print(cur.fetchall())
-        else:
-            print("Error, try again")
-            return True
-                
-    else:
-            print("Error, try again")
-            return True
-    
+#4
+#add order by
+func2 = """
+CREATE OR REPLACE FUNCTION pagination(lim INT, setoff INT)
+RETURNS SETOF PhoneBook 
+LANGUAGE plpgsql
+AS $$
+BEGIN
+	RETURN QUERY
+	SELECT * FROM phonebook
+	LIMIT lim OFFSET setoff; 
+END;
+$$;	"""
+cur.execute(func2)
+cur.execute("SELECT * FROM pagination(4, 2);")
+print("\n#4")
+print(cur.fetchall())
 
-while True:
-    if not update():
-        break
+#5
+proc3 = """
+CREATE OR REPLACE PROCEDURE deleting(n VARCHAR, num VARCHAR)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+	DELETE FROM phonebook
+	WHERE name = n OR number = num;
+END;
+$$;"""
+cur.execute(proc3)
+print("\n#5")
+cur.execute(f"CALL deleting('Max', '15136')")
+cur.execute("SELECT * FROM phonebook")
+print(cur.fetchall())
+
+
+
+cur.execute("DROP PROCEDURE insert_from_list;")
+cur.execute("DROP PROCEDURE deleting;")
+cur.execute("DROP FUNCTION search_by_pattern;")
+cur.execute("DROP FUNCTION pagination;")
+cur.execute("DROP PROCEDURE insert_or_update;")
 
 
 connection.commit()
